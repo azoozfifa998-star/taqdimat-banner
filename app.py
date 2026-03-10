@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import requests
 import qrcode
 from colorthief import ColorThief
@@ -8,6 +8,8 @@ import os
 import base64
 
 app = Flask(__name__)
+
+IMGBB_KEY = "0b973e925d4f4470cee367bcfccfcd13"
 
 @app.route('/generate', methods=['POST'])
 def generate_banner():
@@ -21,11 +23,12 @@ def generate_banner():
     apply_url = data.get('apply_url', '')
     logo_url = data.get('logo_url', '')
     
-    # تحميل الشعار
+    # تحميل الشعار واستخراج اللون
     try:
         logo_response = requests.get(logo_url, timeout=10)
-        logo_img = Image.open(io.BytesIO(logo_response.content)).convert('RGBA')
-        ct = ColorThief(io.BytesIO(logo_response.content))
+        logo_bytes = logo_response.content
+        logo_img = Image.open(io.BytesIO(logo_bytes)).convert('RGBA')
+        ct = ColorThief(io.BytesIO(logo_bytes))
         dominant_color = ct.get_color(quality=1)
     except:
         logo_img = None
@@ -36,27 +39,43 @@ def generate_banner():
     img = Image.new('RGB', (width, height), color=dominant_color)
     draw = ImageDraw.Draw(img)
     
-    # خلفية بيضاء في المنتصف
-    draw.rectangle([40, 200, width-40, height-40], fill=(255,255,255))
+    # خلفية بيضاء
+    draw.rectangle([40, 200, width-40, height-160], fill=(255, 255, 255))
     
-    # إضافة الشعار
+    # شعار الجهة
     if logo_img:
         logo_img.thumbnail((150, 150))
-        logo_pos = ((width - logo_img.width) // 2, 30)
-        img.paste(logo_img, logo_pos, logo_img)
+        logo_x = (width - logo_img.width) // 2
+        img.paste(logo_img, (logo_x, 30), logo_img)
     
     # QR Code
-    qr = qrcode.make(apply_url)
-    qr = qr.resize((150, 150))
-    img.paste(qr, (width-190, height-190))
+    try:
+        qr = qrcode.make(apply_url)
+        qr = qr.resize((160, 160))
+        img.paste(qr, (width - 200, height - 200))
+    except:
+        pass
     
-    # حفظ كـ base64
+    # رفع لـ imgbb
     output = io.BytesIO()
     img.save(output, format='PNG')
     output.seek(0)
     img_base64 = base64.b64encode(output.read()).decode('utf-8')
     
-    return jsonify({'image': img_base64})
+    try:
+        response = requests.post(
+            'https://api.imgbb.com/1/upload',
+            data={
+                'key': IMGBB_KEY,
+                'image': img_base64
+            }
+        )
+        result = response.json()
+        image_url = result['data']['url']
+    except:
+        image_url = ''
+    
+    return jsonify({'url': image_url})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
