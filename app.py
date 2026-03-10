@@ -1,10 +1,11 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, jsonify
 from PIL import Image, ImageDraw, ImageFont
 import requests
 import qrcode
 from colorthief import ColorThief
 import io
 import os
+import base64
 
 app = Flask(__name__)
 
@@ -35,8 +36,8 @@ def generate_banner():
     img = Image.new('RGB', (width, height), color=dominant_color)
     draw = ImageDraw.Draw(img)
     
-    # خلفية فاتحة في المنتصف
-    draw.rectangle([40, 200, width-40, height-40], fill=(255,255,255,230))
+    # خلفية بيضاء في المنتصف
+    draw.rectangle([40, 200, width-40, height-40], fill=(255,255,255))
     
     # إضافة الشعار
     if logo_img:
@@ -49,12 +50,13 @@ def generate_banner():
     qr = qr.resize((150, 150))
     img.paste(qr, (width-190, height-190))
     
-    # حفظ وإرسال
+    # حفظ كـ base64
     output = io.BytesIO()
     img.save(output, format='PNG')
     output.seek(0)
+    img_base64 = base64.b64encode(output.read()).decode('utf-8')
     
-    return send_file(output, mimetype='image/png')
+    return jsonify({'image': img_base64})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
